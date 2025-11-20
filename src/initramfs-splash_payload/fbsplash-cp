@@ -1,0 +1,28 @@
+#!/bin/sh
+PREREQ=""
+prereqs() {
+         echo "$PREREQ"
+}
+case $1 in 
+# get pre-requisites 
+prereqs)
+         prereqs
+         exit 0
+         ;; esac
+# fbcp 
+
+BASEDIR="$(dirname ""$(readlink -f ""$0"")"")/splash"
+. /usr/share/initramfs-tools/hook-functions
+if [ -f "${BASEDIR}/fbsplash.png" ]
+then
+  mkdir -p ${DESTDIR}/etc/splash
+  echo imagefile=splash.png > ${DESTDIR}/etc/splash/splash.config
+  echo fullscreen=0 >> ${DESTDIR}/etc/splash/splash.config
+  echo stretch=0 >> ${DESTDIR}/etc/splash/splash.config
+  chmod 666 ${DESTDIR}/etc/splash/splash.config
+  cp -f "${BASEDIR}/fbsplash.png" ${DESTDIR}/etc/splash/splash.png
+  chmod 666 ${DESTDIR}/etc/splash/splash.png
+fi
+cp "${BASEDIR}/fbsplash" ${DESTDIR}/bin
+chmod +x ${DESTDIR}/bin/fbsplash
+exit 0
