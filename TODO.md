@@ -1,4 +1,4 @@
 # TODO
 
-- Build initramfs für trixie
+- [ ] Build initramfs für trixie
 - [ ] Test
