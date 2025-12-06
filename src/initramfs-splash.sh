@@ -420,7 +420,7 @@ EOF
       EXITCODE=1
       return 1
     fi
-  elif [[ "$distib" =~ "bookworm" ]]; then
+  elif [[ "$distib" =~ "bookworm" ]] || [[ "$distib" =~ "trixie" ]]; then
     mkdir -p "/etc/initramfs-tools/conf.d"
     echo "MODULES=most" > "/etc/initramfs-tools/conf.d/imgldr"
     update-initramfs -u
