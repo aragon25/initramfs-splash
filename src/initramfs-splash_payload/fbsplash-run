@@ -187,7 +187,7 @@ if [ "$SHOW_SPLASH" == "true" ]; then
      [ -f "/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] || [ -f "/mnt/tmproot/etc/splash/splash.config" ] || \
      [ -f "/mnt/sysimg/SYSTEM/etc/splash/splash.config" ] || [ -f "/mnt/oemimg/SYSTEM/etc/splash/splash.config" ] || \
      [ -f "/mnt/tmproot/CONFIG/initramfs-splash/splash.config" ]; then
-    show_splash
+    show_splash && sleep 1.5
   elif [ ! -f "/etc/splash/splash.config" ]; then
     echo "... NO SPLASH CONFIG FOUND!! ..."
   fi
