@@ -6,7 +6,6 @@ prereqs()
 	echo "$PREREQ"
 }
 case $1 in
-# get pre-requisites
 prereqs)
 	prereqs
 	exit 0
@@ -19,6 +18,7 @@ ROOT_MOUNT="false"
 SIMG_MOUNT="false"
 OIMG_MOUNT="false"
 SHOW_SPLASH="false"
+SHARE_SPLASH="false"
 
 wait_for_udev() {
 	command -v udevadm >/dev/null 2>&1 || return 0
@@ -43,8 +43,8 @@ get_cmdline() {
 }
 
 get_file_size() {
-  local file="$1"
-  local size=""
+  file="$1"
+  size=""
   if [ ! -f "$file" ]; then
     echo "0"
     return
@@ -74,18 +74,27 @@ get_file_size() {
 }
 
 get_devices() {
-  [ "$ROOT_FS" == "___ROOT_FS___" ] && return 0
+  [ "$ROOT_FS" = "___ROOT_FS___" ] && return 0
   wait_for_udev 10
   n=0
-  until [ $n -ge 10 ]
-  do
+  while [ "$n" -lt 10 ]; do
     case "$ROOT_FS" in
-      LABEL=* | UUID=* | PARTLABEL=* | PARTUUID=*)
-        ROOT_DEV="$(blkid -l -t "$ROOT_FS" -o device)" || ROOT_DEV="___ROOT_DEV___"
+      LABEL=*|UUID=*|PARTLABEL=*|PARTUUID=*)
+        # ROOT_DEV="$(blkid -l -t "$ROOT_FS" -o device 2>/dev/null)" || ROOT_DEV="___ROOT_DEV___"
+        key="${ROOT_FS%%=*}"
+        val="${ROOT_FS#*=}"
+        link=""
+        case "$key" in
+          UUID)      link="/dev/disk/by-uuid/$val" ;;
+          LABEL)     link="/dev/disk/by-label/$val" ;;
+          PARTUUID)  link="/dev/disk/by-partuuid/$val" ;;
+          PARTLABEL) link="/dev/disk/by-partlabel/$val" ;;
+        esac
+        [ -n "$link" ] && [ -e "$link" ] && ROOT_DEV="$(readlink -f "$link" 2>/dev/null || echo "___ROOT_DEV___")"
       ;;
     esac
     [ "$ROOT_DEV" != "___ROOT_DEV___" ] && break
-    let "n=n+1"
+    n=$((n+1))
     sleep 1.0
   done
 }
@@ -93,18 +102,18 @@ get_devices() {
 mount_fs() {
   if [ "$ROOT_DEV" != "___ROOT_DEV___" ]; then 
     mkdir -p /mnt/tmproot
-    if mount -r $ROOT_DEV /mnt/tmproot; then
+    if mount -r "$ROOT_DEV" /mnt/tmproot; then
       ROOT_MOUNT="true"
-      if [ "$BOOT_MODE" == "image" ]; then
+      if [ "$BOOT_MODE" = "image" ]; then
         if [ -f /mnt/tmproot/IMAGES/system.img ]; then
           mkdir -p /mnt/sysimg
-          if mount -r -t ext4 /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
+          if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
             SIMG_MOUNT="true"
           fi
         fi
         if [ -f /mnt/tmproot/IMAGES/oem.img ]; then
           mkdir -p /mnt/oemimg
-          if mount -r -t ext4 /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
+          if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
             OIMG_MOUNT="true"
           fi
         fi
@@ -113,65 +122,107 @@ mount_fs() {
   fi
 }
 
+get_splash_path() {
+  splash_pth="/etc/splash"
+  [ -f "/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash"
+  [ -f "/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
+  [ -f "/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
+  [ -f "/mnt/tmproot/etc/splash/splash.config" ] && splash_pth="/mnt/tmproot/etc/splash"
+  [ -f "/mnt/sysimg/SYSTEM/etc/splash/splash.config" ] && splash_pth="/mnt/sysimg/SYSTEM/etc/splash"
+  [ -f "/mnt/oemimg/SYSTEM/etc/splash/splash.config" ] && splash_pth="/mnt/oemimg/SYSTEM/etc/splash"
+  [ -f "/mnt/tmproot/CONFIG/initramfs-splash/splash.config" ] && splash_pth="/mnt/tmproot/CONFIG/initramfs-splash"
+  echo "$splash_pth"
+}
+
 umount_fs() {
-  local attempt=1
+  attempt=1
   sync >/dev/null 2>&1
-  while [ "$SIMG_MOUNT" == "true" ] && [ $attempt -le 30 ]; do
+  while [ "$SIMG_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
     umount /mnt/sysimg >/dev/null 2>&1 && SIMG_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
   attempt=1
-  while [ "$OIMG_MOUNT" == "true" ] && [ $attempt -le 30 ]; do
+  while [ "$OIMG_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
     umount /mnt/oemimg >/dev/null 2>&1 && OIMG_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
   attempt=1
-  while [ "$ROOT_MOUNT" == "true" ] && [ $attempt -le 30 ]; do
+  while [ "$ROOT_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
     umount /mnt/tmproot >/dev/null 2>&1 && ROOT_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
-  [ "$SIMG_MOUNT" == "true" ] && echo "Could not umount: /mnt/sysimg"
-  [ "$OIMG_MOUNT" == "true" ] && echo "Could not umount: /mnt/oemimg"
-  [ "$ROOT_MOUNT" == "true" ] && echo "Could not umount: /mnt/tmproot"
+  [ "$SIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/sysimg"
+  [ "$OIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/oemimg"
+  [ "$ROOT_MOUNT" = "true" ] && echo "Could not umount: /mnt/tmproot"
+}
+
+share_splash_img() {
+  [ "$SHARE_SPLASH" = "false" ] && return
+  splash_img=""
+  splash_pth="$(get_splash_path)"
+  [ ! -f "$splash_pth/splash.config" ] && return
+  # splash_img=$(awk -F '=' '/^imagefile/{print $2}' "$splash_pth/splash.config")
+  # splash_img=$(sed -n 's/^imagefile=//p' "$splash_pth/splash.config" | head -n1)
+  splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)
+  [ -z "$splash_img" ] && splash_img="splash.png"
+  [ ! -f "$splash_pth/$splash_img" ] && return
+  mkdir -p /etc/splash >/dev/null 2>&1
+  if [ "$splash_pth" != "/etc/splash" ]; then
+    cp -f "$splash_pth/splash.config" "/etc/splash/splash.config"
+    cp -f "$splash_pth/$splash_img" "/etc/splash/$splash_img"
+  fi
+  if [ -f "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" ]; then
+    if ! diff "/etc/splash/$splash_img" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$splash_img" >/dev/null 2>&1; then
+      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
+      cp -f "/etc/splash/$splash_img" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$splash_img"
+      # sed -i "s/^image.*Image(.*$/image = Image(\"${splash_img}\");/" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+      sed -i 's#^[[:space:]]*image[[:space:]]*=[[:space:]]*Image(.*)#image = Image("'"$splash_img"'");#' \
+        "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+    fi
+  fi
+  # if [ -d "/mnt/tmproot/STATIC" ]; then
+  #   mkdir -p "/mnt/tmproot/STATIC/splash" >/dev/null 2>&1
+  #   if [ -f "$splash_pth/splash.config" ] && ! diff "$splash_pth/splash.config" "/mnt/tmproot/STATIC/splash/splash.config" >/dev/null 2>&1; then
+  #     cp -f "$splash_pth/splash.config" "/mnt/tmproot/STATIC/splash/splash.config"
+  #   fi
+  #   if [ -f "$splash_pth/$splash_img" ] && ! diff "$splash_pth/$splash_img" "/mnt/tmproot/STATIC/splash/$splash_img" >/dev/null 2>&1; then
+  #     cp -f "$splash_pth/$splash_img" "/mnt/tmproot/STATIC/splash/$splash_img"
+  #   fi
+  # fi
 }
 
 show_splash() {
-  local splashimg="splash.png"
-  local splashpth="/etc/splash"
-  local splashopt=
-  [ -f "/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splashpth="/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash"
-  [ -f "/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splashpth="/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
-  [ -f "/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splashpth="/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
-  [ -f "/mnt/tmproot/etc/splash/splash.config" ] && splashpth="/mnt/tmproot/etc/splash"
-  [ -f "/mnt/sysimg/SYSTEM/etc/splash/splash.config" ] && splashpth="/mnt/sysimg/SYSTEM/etc/splash"
-  [ -f "/mnt/oemimg/SYSTEM/etc/splash/splash.config" ] && splashpth="/mnt/oemimg/SYSTEM/etc/splash"
-  [ -f "/mnt/tmproot/CONFIG/initramfs-splash/splash.config" ] && splashpth="/mnt/tmproot/CONFIG/initramfs-splash"
-  if [ -f "$splashpth/splash.config" ]; then
-    SPLASH_IMG=$(awk -F '=' '/^imagefile/{print $2}' "$splashpth/splash.config")
-    SPLASH_FS=$(awk -F '=' '/^fullscreen/{print $2}' "$splashpth/splash.config")
-    SPLASH_ASP=$(awk -F '=' '/^stretch/{print $2}' "$splashpth/splash.config")
+  splash_img="splash.png"
+  splash_pth="$(get_splash_path)"
+  splash_opt=""
+  if [ -f "$splash_pth/splash.config" ]; then
+    # splash_img=$(awk -F '=' '/^imagefile/{print $2}' "$splash_pth/splash.config")
+    # [ "$splash_img" = "" ] && splash_img="splash.png"
+    # [ "$(awk -F '=' '/^fullscreen/{print $2}' "$splash_pth/splash.config")" = "1" ] && splash_opt="--resize"
+    # [ "$(awk -F '=' '/^stretch/{print $2}' "$splash_pth/splash.config")" = "1" ] && splash_opt="--resize --freeaspect"
+    # splash_img=$(sed -n 's/^imagefile=//p' "$splash_pth/splash.config" | head -n1)
+    splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)
+    [ -z "$splash_img" ] && splash_img="splash.png"
+    # [ "$(sed -n 's/^fullscreen=//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize"
+    # [ "$(sed -n 's/^stretch=//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize --freeaspect"
+    [ "$(sed -n 's/^[[:space:]]*fullscreen[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize"
+    [ "$(sed -n 's/^[[:space:]]*stretch[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize --freeaspect"
+  else
+      echo "... SPLASH CONFIG FILE NOT FOUND!! ..."
+      return
   fi
-  [ "$SPLASH_IMG" != "" ] && splashimg="$SPLASH_IMG"
-  [ "$SPLASH_FS" = "1" ] && splashopt="--resize" || unset SPLASH_ASP
-  [ "$SPLASH_ASP" = "1" ] && splashopt="--resize --freeaspect"
-  if [ -f "$splashpth/$splashimg" ]; then
-    local cfgsize=$(get_file_size "$splashpth/splash.config")
-    local imgsize=$(get_file_size "$splashpth/$splashimg")
-    if [ "$imgsize" -le "5242880" ] && [ "$imgsize" -ne "0" ]; then
-      fbsplash $splashopt "$splashpth/$splashimg"
-      if [ "$splashpth" != "/etc/splash" ]; then
-        if [ "$cfgsize" -le "1048576" ] && [ "$cfgsize" -ne "0" ]; then
-          rm -rf "/etc/splash" >/dev/null 2>&1
-          mkdir -p "/etc/splash" >/dev/null 2>&1
-          cp -f "$splashpth/splash.config" "/etc/splash/splash.config" >/dev/null 2>&1
-          cp -f "$splashpth/$splashimg" "/etc/splash/$splashimg" >/dev/null 2>&1
-        else
-          echo "file: '$splashpth/splash.config'"
-          echo "size: $cfgsize Bytes (max: 1048576 Bytes)"
-          echo "... SPLASH CONFIG FILE EXCEEDS SIZE LIMIT!! ..."
-        fi
-      fi
-    else
-      echo "file: '$splashpth/$splashimg'"
+  if [ -f "$splash_pth/$splash_img" ]; then
+    cfgsize=$(get_file_size "$splash_pth/splash.config")
+    imgsize=$(get_file_size "$splash_pth/$splash_img")
+    if [ "$imgsize" -ge "5242880" ] || [ "$imgsize" -eq "0" ]; then
+      echo "file: '$splash_pth/$splash_img'"
       echo "size: $imgsize Bytes (max: 5242880 Bytes)"
       echo "... SPLASH IMAGE FILE EXCEEDS SIZE LIMIT!! ..."
+    elif [ "$cfgsize" -ge "1048576" ] || [ "$cfgsize" -eq "0" ]; then
+      echo "file: '$splash_pth/splash.config'"
+      echo "size: $cfgsize Bytes (max: 1048576 Bytes)"
+      echo "... SPLASH CONFIG FILE EXCEEDS SIZE LIMIT!! ..."
+    else
+      SHARE_SPLASH="true"
+      fbsplash $splash_opt "$splash_pth/$splash_img" 2>/dev/null
     fi
   else
     echo "... SPLASH IMAGE NOT FOUND!! ..."
@@ -179,17 +230,30 @@ show_splash() {
 }
 
 get_cmdline
-if [ "$SHOW_SPLASH" == "true" ]; then
+if [ "$SHOW_SPLASH" = "true" ]; then
   [ -f "/etc/splash/splash.config" ] && show_splash && sleep 1.5
   get_devices
   mount_fs
-  if [ -f "/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] || [ -f "/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] || \
-     [ -f "/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] || [ -f "/mnt/tmproot/etc/splash/splash.config" ] || \
-     [ -f "/mnt/sysimg/SYSTEM/etc/splash/splash.config" ] || [ -f "/mnt/oemimg/SYSTEM/etc/splash/splash.config" ] || \
-     [ -f "/mnt/tmproot/CONFIG/initramfs-splash/splash.config" ]; then
+  if [ "$(get_splash_path)" != "/etc/splash" ]; then
     show_splash && sleep 1.5
   elif [ ! -f "/etc/splash/splash.config" ]; then
     echo "... NO SPLASH CONFIG FOUND!! ..."
   fi
+  share_splash_img
   umount_fs
+  if [ -e "/scripts/init-bottom/plymouth" ]; then
+    echo "#!/bin/sh" > /scripts/init-bottom/plymouth
+    echo "exit 0" >> /scripts/init-bottom/plymouth
+    chmod +x /scripts/init-bottom/plymouth
+  fi
+  if [ -e "/scripts/init-premount/plymouth" ]; then
+    echo "#!/bin/sh" > /scripts/init-premount/plymouth
+    echo "exit 0" >> /scripts/init-premount/plymouth
+    chmod +x /scripts/init-premount/plymouth
+  fi
+  if [ -e "/scripts/panic/plymouth" ]; then
+    echo "#!/bin/sh" > /scripts/panic/plymouth
+    echo "exit 0" >> /scripts/panic/plymouth
+    chmod +x /scripts/panic/plymouth
+  fi
 fi

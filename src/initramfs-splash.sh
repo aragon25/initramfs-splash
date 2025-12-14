@@ -30,7 +30,7 @@ cpuarch=""
 #only for os architecture (32|64) can NOT combined!
 bsarch=""
 #this aptpaks need to be installed!
-aptpaks=( initramfs-tools cpio sed )
+aptpaks=( initramfs-tools cpio sed plymouth plymouth-themes )
 
 #check commands
 for i in "$@"
@@ -40,16 +40,24 @@ do
     cmd="${cmd}clean"
     shift # past argument
     ;;
+    -p|--plymouth_active)
+    cmd="${cmd}plymouth_active"
+    shift # past argument
+    ;;
+    -P|--plymouth_inactive)
+    cmd="${cmd}plymouth_inactive"
+    shift # past argument
+    ;;
     -u|--update_initramfs)
     cmd="${cmd}update_initramfs"
     shift # past argument
     ;;
-    -i|--install)
-    cmd="${cmd}install"
+    -i|--install_initramfs)
+    cmd="${cmd}install_initramfs"
     shift # past argument
     ;;
-    -r|--remove)
-    cmd="${cmd}remove"
+    -r|--remove_initramfs)
+    cmd="${cmd}remove_initramfs"
     shift # past argument
     ;;
     -f|--cmdline_fastboot_active)
@@ -101,8 +109,12 @@ do
     ;;
   esac
 done
-if [[ "$cmd" =~ "install" ]] && [[ "$cmd" =~ "remove" ]]; then
-  echo "option install and remove can not combined!"
+if [[ "$cmd" =~ "install_initramfs" ]] && [[ "$cmd" =~ "remove_initramfs" ]]; then
+  echo "option install_initramfs and remove_initramfs can not combined!"
+  cmd="help"
+fi
+if [[ "$cmd" =~ "plymouth_active" ]] && [[ "$cmd" =~ "plymouth_inactive" ]]; then
+  echo "option plymouth_active and plymouth_inactive can not combined!"
   cmd="help"
 fi
 if [[ "$cmd" =~ "cmdline_fastboot_active" ]] && [[ "$cmd" =~ "cmdline_fastboot_inactive" ]]; then
@@ -314,15 +326,117 @@ function cmd_payload_unpack() {
 }
 
 function cmd_clean() {
-  cmd_remove
+  cmd_remove_initramfs
   cmd_update_initramfs
   cmd_cmdline_splash_inactive
   cmd_cmdline_termcursor_inactive
+  cmd_plymouth_inactive "deactivate" >/dev/null 2>&1
 }
 
-function cmd_install() {
+function create_plymouth_theme() {
+  extract_files >/dev/null 2>&1
+  rm -rf "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+  mkdir -p "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+  cp -af "$UNPACK_DIR/fbsplash.png" /usr/share/plymouth/themes/initramfs-splash/splash.png >/dev/null 2>&1
+  rm -rf "$UNPACK_DIR"
+  if [ ! -f "/usr/share/plymouth/themes/initramfs-splash/splash.png" ]; then
+    rm -rf "/usr/share/plymouth/themes/initramfs-splash"
+    echo "... Could not create plymouth theme! (extract error) ..."
+    EXITCODE=1
+    return 1
+  fi
+  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/splash.png" >/dev/null 2>&1
+  cat >>"/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" <<EOF
+[Plymouth Theme]
+Name=initramfs-splash
+Description=This is a plymouth theme which simply displays an image
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/initramfs-splash
+ScriptFile=/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script
+EOF
+  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" >/dev/null 2>&1
+  cat >>"/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" <<EOF
+image = Image("splash.png");
+
+pos_x = Window.GetWidth()/2 - image.GetWidth()/2;
+pos_y = Window.GetHeight()/2 - image.GetHeight()/2;
+
+sprite = Sprite(image);
+sprite.SetX(pos_x);
+sprite.SetY(pos_y);
+
+fun refresh_callback () {
+  sprite.SetOpacity(1);
+  spr.SetZ(15);
+}
+
+Plymouth.SetRefreshFunction (refresh_callback);
+EOF
+  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+}
+
+function cmd_plymouth_active() {
+  create_plymouth_theme
+  if [ -f "/usr/lib/initramfs-splash/plymouth_update" ]; then
+    rm -f "/usr/lib/initramfs-splash/plymouth_update" 2>/dev/null
+    return $EXITCODE
+  fi
+  [ $EXITCODE -ne 0 ] && return 1
+  mkdir -p "/usr/lib/initramfs-splash" >/dev/null 2>&1
+  if command -v plymouth-set-default-theme >/dev/null; then
+    local current_theme="$(plymouth-set-default-theme)"
+    if [ "$current_theme" != "initramfs-splash" ]; then
+      echo "$current_theme" >"/usr/lib/initramfs-splash/plymouth_savedtheme" 2>/dev/null
+      plymouth-set-default-theme -R initramfs-splash >/dev/null 2>&1
+    fi
+  elif command -v update-alternatives >/dev/null; then
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth 150 >/dev/null 2>&1
+    update-alternatives --set default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth >/dev/null 2>&1
+    update-initramfs -u >/dev/null 2>&1
+  else
+    echo "... No suitable command found to set plymouth theme! ..."
+    rm -rf "/usr/share/plymouth/themes/initramfs-splash" 2>/dev/null
+    rm -f "/usr/lib/initramfs-splash/plymouth_savedtheme" 2>/dev/null
+    EXITCODE=1
+    return 1
+  fi
+  echo "plymouth theme activated!"
+}
+
+function cmd_plymouth_inactive() {
+  if command -v plymouth-set-default-theme >/dev/null; then
+    local current_theme="$(plymouth-set-default-theme)"
+    local saved_theme="$(awk 'NR==1 {print $1}' /usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
+    if [ "$current_theme" == "initramfs-splash" ]; then
+      if [ "$saved_theme" != "" ]; then
+        if ! plymouth-set-default-theme -R "$saved_theme" >/dev/null 2>&1; then
+          plymouth-set-default-theme -R details >/dev/null 2>&1
+        fi
+      else
+        plymouth-set-default-theme -R details >/dev/null 2>&1
+      fi
+    fi
+  elif command -v update-alternatives >/dev/null; then
+    if [ "$1" == "deactivate" ]; then
+      update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/details/details.plymouth 50 >/dev/null 2>&1
+      update-alternatives --remove default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth >/dev/null 2>&1
+      update-initramfs -u >/dev/null 2>&1
+    fi
+  else
+    echo "... No suitable command found to set plymouth theme! ..."
+    EXITCODE=1
+    return 1
+  fi
+  [ "$1" == "deactivate" ] && rm -rf "/usr/share/plymouth/themes/initramfs-splash" 2>/dev/null
+  [ "$1" == "deactivate" ] && rm -f "/usr/lib/initramfs-splash/plymouth_savedtheme" 2>/dev/null
+  echo "plymouth theme deactivated!"
+}
+
+function cmd_install_initramfs() {
   local files_ok="true"
-  cmd_remove &>/dev/null
+  cmd_remove_initramfs &>/dev/null
   extract_files
   if [ $? -ne 0 ]; then 
     echo "... Could not install splash to initramfs-tools directory! (extract error) ..."
@@ -344,14 +458,14 @@ function cmd_install() {
   rm -rf "$UNPACK_DIR"
   if [ "$files_ok" == "false" ]; then
     echo "... Could not install splash to initramfs-tools directory! (copy error) ..."
-    cmd_remove &>/dev/null
+    cmd_remove_initramfs &>/dev/null
     EXITCODE=1
     return 1
   fi
   echo "installed splash to initramfs-tools directory."
 }
 
-function cmd_remove() {
+function cmd_remove_initramfs() {
   rm -f "/etc/initramfs-tools/scripts/init-top/fbsplash"
   rm -f "/etc/initramfs-tools/hooks/fbsplash"
   rm -f "/etc/initramfs-tools/hooks/splash/fbsplash"
@@ -516,9 +630,11 @@ function cmd_print_help() {
   echo " "
   echo "-c, --clean                       remove files from initramfs-tools folder"
   echo "                                  and rebuild image"
-  echo "-i, --install                     install files to initramfs-tools folder"
-  echo "-r, --remove                      remove files from initramfs-tools folder"
+  echo "-i, --install_initramfs           install files to initramfs-tools folder"
+  echo "-r, --remove_initramfs            remove files from initramfs-tools folder"
   echo "-u, --update_initramfs            rebuild initramfs image"
+  echo "-p, --plymouth_active             set simple plymouth theme as default"
+  echo "-P, --plymouth_inactive           set default plymouth theme as default"
   echo "-f, --cmdline_fastboot_active     set fastboot flag in cmdline.txt"
   echo "-F, --cmdline_fastboot_inactive   unset fastboot flag in cmdline.txt"
   echo "-s, --cmdline_splash_active       set showing splash in cmdline.txt"
@@ -536,9 +652,11 @@ function cmd_print_help() {
 [[ "$cmd" == "version" ]] && cmd_print_version
 [[ "$cmd" == "help" ]] && cmd_print_help
 [[ "$cmd" == "clean" ]] && cmd_clean
-[[ "$cmd" =~ "install" ]] && cmd_install
-[[ "$cmd" =~ "remove" ]] && cmd_remove
+[[ "$cmd" =~ "install_initramfs" ]] && cmd_install_initramfs
+[[ "$cmd" =~ "remove_initramfs" ]] && cmd_remove_initramfs
 [[ "$cmd" =~ "update_initramfs" ]] && cmd_update_initramfs
+[[ "$cmd" =~ "plymouth_active" ]] && cmd_plymouth_active
+[[ "$cmd" =~ "plymouth_inactive" ]] && cmd_plymouth_inactive "deactivate"
 [[ "$cmd" =~ "cmdline_fastboot_active" ]] && cmd_cmdline_fastboot_active
 [[ "$cmd" =~ "cmdline_fastboot_inactive" ]] && cmd_cmdline_fastboot_inactive
 [[ "$cmd" =~ "cmdline_splash_active" ]] && cmd_cmdline_splash_active

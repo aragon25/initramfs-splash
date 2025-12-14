@@ -14,5 +14,10 @@ if [ -f "/usr/bin/initramfs-splash" ]; then
   echo "generate initramfs-image/s ..."
   /usr/bin/initramfs-splash --update_initramfs >/dev/null 2>&1
   [ $? -ne 0 ] && undo_changes
+  echo "re-/generate plymouth theme ..."
+  mkdir -p /usr/lib/initramfs-splash >/dev/null 2>&1
+  touch /usr/lib/initramfs-splash/plymouth_update >/dev/null 2>&1
+  /usr/bin/initramfs-splash --plymouth_active >/dev/null 2>&1
+  [ $? -ne 0 ] && undo_changes
 fi
 exit 0
