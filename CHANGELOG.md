@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Raspbian Trixie support
+- default simple plymouth theme
 
 ### Fixed
 - usage text in help.
