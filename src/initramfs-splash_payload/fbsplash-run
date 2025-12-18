@@ -17,8 +17,6 @@ ROOT_DEV="___ROOT_DEV___"
 ROOT_MOUNT="false"
 SIMG_MOUNT="false"
 OIMG_MOUNT="false"
-SHOW_SPLASH="false"
-SHARE_SPLASH="false"
 
 wait_for_udev() {
 	command -v udevadm >/dev/null 2>&1 || return 0
@@ -32,11 +30,8 @@ get_cmdline() {
       root=*)
         ROOT_FS=${x#root=}
       ;;
-      boot=*)
-        BOOT_MODE=${x#boot=}
-      ;;
       splash)
-        SHOW_SPLASH="true"
+        SHOW_SPLASH="yes"
       ;;
     esac
   done
@@ -80,7 +75,6 @@ get_devices() {
   while [ "$n" -lt 10 ]; do
     case "$ROOT_FS" in
       LABEL=*|UUID=*|PARTLABEL=*|PARTUUID=*)
-        # ROOT_DEV="$(blkid -l -t "$ROOT_FS" -o device 2>/dev/null)" || ROOT_DEV="___ROOT_DEV___"
         key="${ROOT_FS%%=*}"
         val="${ROOT_FS#*=}"
         link=""
@@ -104,18 +98,16 @@ mount_fs() {
     mkdir -p /mnt/tmproot
     if mount -r "$ROOT_DEV" /mnt/tmproot; then
       ROOT_MOUNT="true"
-      if [ "$BOOT_MODE" = "image" ]; then
-        if [ -f /mnt/tmproot/IMAGES/system.img ]; then
-          mkdir -p /mnt/sysimg
-          if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
-            SIMG_MOUNT="true"
-          fi
+      if [ -f /mnt/tmproot/IMAGES/system.img ]; then
+        mkdir -p /mnt/sysimg
+        if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
+          SIMG_MOUNT="true"
         fi
-        if [ -f /mnt/tmproot/IMAGES/oem.img ]; then
-          mkdir -p /mnt/oemimg
-          if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
-            OIMG_MOUNT="true"
-          fi
+      fi
+      if [ -f /mnt/tmproot/IMAGES/oem.img ]; then
+        mkdir -p /mnt/oemimg
+        if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
+          OIMG_MOUNT="true"
         fi
       fi
     fi
@@ -153,58 +145,74 @@ umount_fs() {
   [ "$ROOT_MOUNT" = "true" ] && echo "Could not umount: /mnt/tmproot"
 }
 
-share_splash_img() {
-  [ "$SHARE_SPLASH" = "false" ] && return
-  splash_img=""
-  splash_pth="$(get_splash_path)"
-  [ ! -f "$splash_pth/splash.config" ] && return
-  # splash_img=$(awk -F '=' '/^imagefile/{print $2}' "$splash_pth/splash.config")
-  # splash_img=$(sed -n 's/^imagefile=//p' "$splash_pth/splash.config" | head -n1)
-  splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)
-  [ -z "$splash_img" ] && splash_img="splash.png"
-  [ ! -f "$splash_pth/$splash_img" ] && return
-  mkdir -p /etc/splash >/dev/null 2>&1
-  if [ "$splash_pth" != "/etc/splash" ]; then
-    cp -f "$splash_pth/splash.config" "/etc/splash/splash.config"
-    cp -f "$splash_pth/$splash_img" "/etc/splash/$splash_img"
-  fi
-  if [ -f "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" ]; then
-    if ! diff "/etc/splash/$splash_img" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$splash_img" >/dev/null 2>&1; then
+share_splash() {
+  if [ -z "$SPLASH_IMG" ]; then
+    rm -rf "/etc/splash" >/dev/null 2>&1
+    if [ -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" ]; then
       mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
-      cp -f "/etc/splash/$splash_img" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$splash_img"
-      # sed -i "s/^image.*Image(.*$/image = Image(\"${splash_img}\");/" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
-      sed -i 's#^[[:space:]]*image[[:space:]]*=[[:space:]]*Image(.*)#image = Image("'"$splash_img"'");#' \
+      saved_theme="$(awk 'NR==1 {print $1}' /mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
+      if [ -d "/mnt/tmproot/usr/share/plymouth/themes/$saved_theme" ]; then
+        rm -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
+        rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+        echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
+        echo "Theme=${saved_theme}" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      fi
+      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+    fi
+  else
+    mkdir -p /etc/splash >/dev/null 2>&1
+    if [ "$SPLASH_PTH" != "/etc/splash" ]; then
+      if [ -f "/etc/splash/splash.config" ]; then
+        splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "/etc/splash/splash.config" | head -n1)
+        rm -f "/etc/splash/splash.config" >/dev/null 2>&1
+        rm -f "/etc/splash/$splash_img" >/dev/null 2>&1
+      fi
+      cp -f "$SPLASH_PTH/splash.config" "/etc/splash/splash.config"
+      cp -f "$SPLASH_PTH/$SPLASH_IMG" "/etc/splash/$SPLASH_IMG"
+    fi
+    if [ "$SPLASH_PLY" = "active" ] && [ -f "/etc/splash/initramfs-splash.script" ] && [ -f "/etc/splash/initramfs-splash.plymouth" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
+      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
+      rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+      mkdir -p "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+      cp -f "/etc/splash/initramfs-splash.script" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+      cp -f "/etc/splash/initramfs-splash.plymouth" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" >/dev/null 2>&1
+      cp -f "/etc/splash/$SPLASH_IMG" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$SPLASH_IMG" >/dev/null 2>&1
+      sed -i 's#^[[:space:]]*imagefile[[:space:]]*=.*#imagefile = "'"$SPLASH_IMG"'";#' \
         "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+      sed -i 's#^[[:space:]]*mode[[:space:]]*=.*#mode = "'"$SPLASH_OPT"'";#' \
+        "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+      if [ -f "/mnt/tmproot/etc/plymouth/plymouthd.conf" ]; then
+        saved_theme=$(sed -n 's/^[[:space:]]*Theme[[:space:]]*=[[:space:]]*//p' "/mnt/tmproot/etc/plymouth/plymouthd.conf" | head -n1)
+        [ "$saved_theme" != "initramfs-splash" ] && echo "$saved_theme" > "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme"
+      fi
+      echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
+      echo "Theme=initramfs-splash" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+    elif [ "$SPLASH_PLY" = "inactive" ] && [ -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
+      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
+      saved_theme="$(awk 'NR==1 {print $1}' /mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
+      if [ -d "/mnt/tmproot/usr/share/plymouth/themes/$saved_theme" ]; then
+        rm -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
+        rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+        echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
+        echo "Theme=${saved_theme}" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      fi
       mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
     fi
   fi
-  # if [ -d "/mnt/tmproot/STATIC" ]; then
-  #   mkdir -p "/mnt/tmproot/STATIC/splash" >/dev/null 2>&1
-  #   if [ -f "$splash_pth/splash.config" ] && ! diff "$splash_pth/splash.config" "/mnt/tmproot/STATIC/splash/splash.config" >/dev/null 2>&1; then
-  #     cp -f "$splash_pth/splash.config" "/mnt/tmproot/STATIC/splash/splash.config"
-  #   fi
-  #   if [ -f "$splash_pth/$splash_img" ] && ! diff "$splash_pth/$splash_img" "/mnt/tmproot/STATIC/splash/$splash_img" >/dev/null 2>&1; then
-  #     cp -f "$splash_pth/$splash_img" "/mnt/tmproot/STATIC/splash/$splash_img"
-  #   fi
-  # fi
 }
 
 show_splash() {
   splash_img="splash.png"
   splash_pth="$(get_splash_path)"
   splash_opt=""
+  splash_ply=""
   if [ -f "$splash_pth/splash.config" ]; then
-    # splash_img=$(awk -F '=' '/^imagefile/{print $2}' "$splash_pth/splash.config")
-    # [ "$splash_img" = "" ] && splash_img="splash.png"
-    # [ "$(awk -F '=' '/^fullscreen/{print $2}' "$splash_pth/splash.config")" = "1" ] && splash_opt="--resize"
-    # [ "$(awk -F '=' '/^stretch/{print $2}' "$splash_pth/splash.config")" = "1" ] && splash_opt="--resize --freeaspect"
-    # splash_img=$(sed -n 's/^imagefile=//p' "$splash_pth/splash.config" | head -n1)
     splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)
     [ -z "$splash_img" ] && splash_img="splash.png"
-    # [ "$(sed -n 's/^fullscreen=//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize"
-    # [ "$(sed -n 's/^stretch=//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize --freeaspect"
     [ "$(sed -n 's/^[[:space:]]*fullscreen[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize"
     [ "$(sed -n 's/^[[:space:]]*stretch[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_opt="--resize --freeaspect"
+    [ "$(sed -n 's/^[[:space:]]*plymouth[[:space:]]*=[[:space:]]*//p' "$splash_pth/splash.config" | head -n1)" = "1" ] && splash_ply="active"
   else
       echo "... SPLASH CONFIG FILE NOT FOUND!! ..."
       return
@@ -221,8 +229,14 @@ show_splash() {
       echo "size: $cfgsize Bytes (max: 1048576 Bytes)"
       echo "... SPLASH CONFIG FILE EXCEEDS SIZE LIMIT!! ..."
     else
-      SHARE_SPLASH="true"
-      fbsplash $splash_opt "$splash_pth/$splash_img" 2>/dev/null
+      SPLASH_IMG="$splash_img"
+      SPLASH_PTH="$splash_pth"
+      SPLASH_OPT="center"
+      SPLASH_PLY="inactive"
+      [ "$splash_opt" = "--resize" ] && SPLASH_OPT="fullscreen"
+      [ "$splash_opt" = "--resize --freeaspect" ] && SPLASH_OPT="stretch"
+      [ "$splash_ply" = "active" ] && SPLASH_PLY="active"
+      fbsplash $splash_opt "$splash_pth/$splash_img" 2>/dev/null && sleep 1.5
     fi
   else
     echo "... SPLASH IMAGE NOT FOUND!! ..."
@@ -230,16 +244,16 @@ show_splash() {
 }
 
 get_cmdline
-if [ "$SHOW_SPLASH" = "true" ]; then
-  [ -f "/etc/splash/splash.config" ] && show_splash && sleep 1.5
+if [ -n "$SHOW_SPLASH" ]; then
+  [ -f "/etc/splash/splash.config" ] && show_splash
   get_devices
   mount_fs
   if [ "$(get_splash_path)" != "/etc/splash" ]; then
-    show_splash && sleep 1.5
+    show_splash
   elif [ ! -f "/etc/splash/splash.config" ]; then
     echo "... NO SPLASH CONFIG FOUND!! ..."
   fi
-  share_splash_img
+  share_splash
   umount_fs
   if [ -e "/scripts/init-bottom/plymouth" ]; then
     echo "#!/bin/sh" > /scripts/init-bottom/plymouth

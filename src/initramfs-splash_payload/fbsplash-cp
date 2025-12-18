@@ -13,16 +13,24 @@ prereqs)
 
 BASEDIR="$(dirname ""$(readlink -f ""$0"")"")/splash"
 . /usr/share/initramfs-tools/hook-functions
-if [ -f "${BASEDIR}/fbsplash.png" ]
-then
+if [ -f "${BASEDIR}/fbsplash.png" ]; then
   mkdir -p ${DESTDIR}/etc/splash
   echo imagefile=splash.png > ${DESTDIR}/etc/splash/splash.config
   echo fullscreen=0 >> ${DESTDIR}/etc/splash/splash.config
   echo stretch=0 >> ${DESTDIR}/etc/splash/splash.config
+  echo plymouth=0 >> ${DESTDIR}/etc/splash/splash.config
   chmod 666 ${DESTDIR}/etc/splash/splash.config
   cp -f "${BASEDIR}/fbsplash.png" ${DESTDIR}/etc/splash/splash.png
   chmod 666 ${DESTDIR}/etc/splash/splash.png
 fi
-cp "${BASEDIR}/fbsplash" ${DESTDIR}/bin
-chmod +x ${DESTDIR}/bin/fbsplash
+if [ -f "${BASEDIR}/splash_plymouth" ] && [ -f "${BASEDIR}/splash_script" ]; then
+  cp "${BASEDIR}/splash_plymouth" ${DESTDIR}/etc/splash/initramfs-splash.plymouth
+  chmod 644 ${DESTDIR}/etc/splash/initramfs-splash.plymouth
+  cp "${BASEDIR}/splash_script" ${DESTDIR}/etc/splash/initramfs-splash.script
+  chmod 644 ${DESTDIR}/etc/splash/initramfs-splash.plymouth
+fi
+if [ -f "${BASEDIR}/fbsplash" ]; then
+  cp "${BASEDIR}/fbsplash" ${DESTDIR}/bin
+  chmod +x ${DESTDIR}/bin/fbsplash
+fi
 exit 0

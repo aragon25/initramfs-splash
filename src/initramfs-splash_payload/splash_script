@@ -1,0 +1,36 @@
+imagefile = "splash.png";
+mode = "center";
+
+sw = Window.GetWidth();
+sh = Window.GetHeight();
+
+img = Image(imagefile);
+iw = img.GetWidth();
+if (iw < 1) iw = 1;
+ih = img.GetHeight();
+if (ih < 1) ih = 1;
+
+if (mode == "fullscreen") {
+  s = sw / iw;
+  t = sh / ih;
+  if (t < s) scale = t; else scale = s;
+  nw = iw * scale;
+  nh = ih * scale;
+  spr = Sprite(img.Scale(nw, nh));
+  spr.SetX((sw - nw) / 2);
+  spr.SetY((sh - nh) / 2);
+} else if (mode == "stretch") {
+  spr = Sprite(img.Scale(sw, sh));
+  spr.SetX(0); spr.SetY(0);
+} else {
+  spr = Sprite(img);
+  spr.SetX(sw/2 - iw/2);
+  spr.SetY(sh/2 - ih/2);
+}
+
+fun refresh_callback () {
+  spr.SetOpacity(1);
+  spr.SetZ(15);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

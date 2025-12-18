@@ -57,14 +57,6 @@ do
     cmd="${cmd}initramfs_inactive"
     shift # past argument
     ;;
-    -p|--plymouth_active)
-    cmd="${cmd}plymouth_active"
-    shift # past argument
-    ;;
-    -P|--plymouth_inactive)
-    cmd="${cmd}plymouth_inactive"
-    shift # past argument
-    ;;
     -f|--cmdline_fastboot_active)
     cmd="${cmd}cmdline_fastboot_active"
     shift # past argument
@@ -116,10 +108,6 @@ do
 done
 if [[ "$cmd" =~ "initramfs_active" ]] && [[ "$cmd" =~ "initramfs_inactive" ]]; then
   echo "option initramfs_active and initramfs_inactive can not combined!"
-  cmd="help"
-fi
-if [[ "$cmd" =~ "plymouth_active" ]] && [[ "$cmd" =~ "plymouth_inactive" ]]; then
-  echo "option plymouth_active and plymouth_inactive can not combined!"
   cmd="help"
 fi
 if [[ "$cmd" =~ "cmdline_fastboot_active" ]] && [[ "$cmd" =~ "cmdline_fastboot_inactive" ]]; then
@@ -330,8 +318,8 @@ function cmd_payload_unpack() {
 }
 
 function cmd_clean() {
-  cmd_initramfs_inactive
-  cmd_plymouth_inactive
+  remove_initramfs
+  update_initramfs
   cmd_cmdline_splash_inactive
   cmd_cmdline_termcursor_inactive
 }
@@ -341,80 +329,6 @@ function cmd_update() {
     install_initramfs >/dev/null 2>&1
     update_initramfs >/dev/null 2>&1
   fi
-  if [ -e "/usr/share/plymouth/themes/initramfs-splash" ]; then
-    create_plymouth_theme >/dev/null 2>&1
-  fi
-}
-
-function create_plymouth_theme() {
-  remove_plymouth_theme >/dev/null 2>&1
-  extract_files >/dev/null 2>&1
-  mkdir -p "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-  cp -af "$UNPACK_DIR/fbsplash.png" /usr/share/plymouth/themes/initramfs-splash/splash.png >/dev/null 2>&1
-  rm -rf "$UNPACK_DIR"
-  if [ ! -f "/usr/share/plymouth/themes/initramfs-splash/splash.png" ]; then
-    rm -rf "/usr/share/plymouth/themes/initramfs-splash"
-    echo "... Could not create plymouth theme! (extract error) ..."
-    EXITCODE=1
-    return 1
-  fi
-  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/splash.png" >/dev/null 2>&1
-  cat >>"/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" <<EOF
-[Plymouth Theme]
-Name=initramfs-splash
-Description=This is a plymouth theme which simply displays an image
-ModuleName=script
-
-[script]
-ImageDir=/usr/share/plymouth/themes/initramfs-splash
-ScriptFile=/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script
-EOF
-  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" >/dev/null 2>&1
-  cat >>"/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" <<EOF
-image = Image("splash.png");
-
-pos_x = Window.GetWidth()/2 - image.GetWidth()/2;
-pos_y = Window.GetHeight()/2 - image.GetHeight()/2;
-
-sprite = Sprite(image);
-sprite.SetX(pos_x);
-sprite.SetY(pos_y);
-
-fun refresh_callback () {
-  sprite.SetOpacity(1);
-  sprite.SetZ(15);
-}
-
-Plymouth.SetRefreshFunction (refresh_callback);
-EOF
-  chmod -f 644 "/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
-  echo "plymouth theme created!"
-}
-
-function remove_plymouth_theme() {
-  rm -rf "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-  echo "plymouth theme removed!"
-}
-
-function set_plymouth_theme() {
-  if command -v plymouth-set-default-theme >/dev/null; then
-    local current_theme="$(plymouth-set-default-theme)"
-    if [ "$current_theme" != "initramfs-splash" ]; then
-      mkdir -p "/usr/lib/initramfs-splash" >/dev/null 2>&1
-      echo "$current_theme" >"/usr/lib/initramfs-splash/plymouth_savedtheme" 2>/dev/null
-      plymouth-set-default-theme -R initramfs-splash >/dev/null 2>&1
-    fi
-  elif command -v update-alternatives >/dev/null; then
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth 140 >/dev/null 2>&1
-    update-alternatives --set default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth >/dev/null 2>&1
-    update-initramfs -u >/dev/null 2>&1
-  else
-    echo "... No suitable command found to set plymouth theme! ..."
-    remove_plymouth_theme >/dev/null 2>&1
-    EXITCODE=1
-    return 1
-  fi
-  echo "plymouth theme set!"
 }
 
 function unset_plymouth_theme() {
@@ -430,17 +344,14 @@ function unset_plymouth_theme() {
         plymouth-set-default-theme -R details >/dev/null 2>&1
       fi
     fi
-  elif command -v update-alternatives >/dev/null; then
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/details/details.plymouth 50 >/dev/null 2>&1
-    update-alternatives --remove default.plymouth /usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth >/dev/null 2>&1
-    update-initramfs -u >/dev/null 2>&1
   else
     echo "... No suitable command found to set plymouth theme! ..."
     EXITCODE=1
     return 1
   fi
   rm -f "/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
-  echo "plymouth theme unset!"
+  rm -rf "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+  echo "plymouth theme set to saved theme!"
 }
 
 function update_initramfs() {
@@ -540,6 +451,10 @@ function install_initramfs() {
   [ -f "/etc/initramfs-tools/hooks/splash/fbsplash" ] || files_ok="false"
   cp -af "$UNPACK_DIR/fbsplash.png" "/etc/initramfs-tools/hooks/splash/fbsplash.png"
   [ -f "/etc/initramfs-tools/hooks/splash/fbsplash.png" ] || files_ok="false"
+  cp -af "$UNPACK_DIR/splash_plymouth" "/etc/initramfs-tools/hooks/splash/splash_plymouth" >/dev/null 2>&1
+  [ -f "/etc/initramfs-tools/hooks/splash/splash_plymouth" ] || files_ok="false"
+  cp -af "$UNPACK_DIR/splash_script" "/etc/initramfs-tools/hooks/splash/splash_script" >/dev/null 2>&1
+  [ -f "/etc/initramfs-tools/hooks/splash/splash_script" ] || files_ok="false"
   chmod +x "/etc/initramfs-tools/scripts/init-top/fbsplash"
   chmod +x "/etc/initramfs-tools/hooks/fbsplash"
   rm -rf "$UNPACK_DIR"
@@ -553,36 +468,23 @@ function install_initramfs() {
 }
 
 function remove_initramfs() {
-  rm -f "/etc/initramfs-tools/scripts/init-top/fbsplash"
-  rm -f "/etc/initramfs-tools/hooks/fbsplash"
-  rm -f "/etc/initramfs-tools/hooks/splash/fbsplash"
-  rm -f "/etc/initramfs-tools/hooks/splash/fbsplash.png"
-  rm -rf "/etc/initramfs-tools/hooks/splash"
-  echo "removed splash from initramfs-tools directory."
-}
-
-function cmd_plymouth_active() {
-  create_plymouth_theme
-  set_plymouth_theme
-  echo "plymouth theme installed and activated!"
-}
-
-function cmd_plymouth_inactive() {
-  unset_plymouth_theme
-  remove_plymouth_theme
-  echo "plymouth theme removed and deactivated!"
+  rm -f "/etc/initramfs-tools/scripts/init-top/fbsplash" >/dev/null 2>&1
+  rm -f "/etc/initramfs-tools/hooks/fbsplash" >/dev/null 2>&1
+  rm -rf "/etc/initramfs-tools/hooks/splash" >/dev/null 2>&1
 }
 
 function cmd_initramfs_active() {
+  unset_plymouth_theme
   install_initramfs
   update_initramfs
-  echo "initramfs splash installed and activated!"
+  echo "initramfs splash installed!"
 }
 
 function cmd_initramfs_inactive() {
+  unset_plymouth_theme
   remove_initramfs
   update_initramfs
-  echo "initramfs splash removed and deactivated!"
+  echo "initramfs splash removed!"
 }
 
 function cmd_cmdline_fastboot_active() {
@@ -661,12 +563,10 @@ function cmd_print_help() {
   echo "-root filesystem:  /IMAGES/oem.img/etc/splash/splash.config"
   echo "-root filesystem:  /CONFIG/initramfs-splash/splash.config"
   echo " "
-  echo "-c, --clean                       remove initramfs-splash, plymouth-splash"
-  echo "                                  and rebuild image"
+  echo "-c, --clean                       remove initramfs-splash, unset cmdline splash,"
+  echo "                                  unset cmdline hide term cursor and rebuild image"
   echo "-i, --initramfs_active            install files to initramfs and rebuild image"
   echo "-I, --initramfs_inactive          remove files from initramfs and rebuild image"
-  echo "-p, --plymouth_active             set simple plymouth theme as default"
-  echo "-P, --plymouth_inactive           set default plymouth theme as default"
   echo "-f, --cmdline_fastboot_active     set fastboot flag in cmdline.txt"
   echo "-F, --cmdline_fastboot_inactive   unset fastboot flag in cmdline.txt"
   echo "-s, --cmdline_splash_active       set showing splash in cmdline.txt"
@@ -687,8 +587,6 @@ function cmd_print_help() {
 [[ "$cmd" == "update" ]] && cmd_update
 [[ "$cmd" =~ "initramfs_active" ]] && cmd_initramfs_active
 [[ "$cmd" =~ "initramfs_inactive" ]] && cmd_initramfs_inactive
-[[ "$cmd" =~ "plymouth_active" ]] && cmd_plymouth_active
-[[ "$cmd" =~ "plymouth_inactive" ]] && cmd_plymouth_inactive
 [[ "$cmd" =~ "cmdline_fastboot_active" ]] && cmd_cmdline_fastboot_active
 [[ "$cmd" =~ "cmdline_fastboot_inactive" ]] && cmd_cmdline_fastboot_inactive
 [[ "$cmd" =~ "cmdline_splash_active" ]] && cmd_cmdline_splash_active
