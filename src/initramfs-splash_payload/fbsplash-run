@@ -146,60 +146,51 @@ umount_fs() {
 }
 
 share_splash() {
-  if [ -z "$SPLASH_IMG" ]; then
-    rm -rf "/etc/splash" >/dev/null 2>&1
-    if [ -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" ]; then
-      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
-      saved_theme="$(awk 'NR==1 {print $1}' /mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
-      if [ -d "/mnt/tmproot/usr/share/plymouth/themes/$saved_theme" ]; then
-        rm -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
-        rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-        echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
-        echo "Theme=${saved_theme}" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
-      fi
-      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+  [ -z "$SPLASH_IMG" ] && rm -rf "/etc/splash" >/dev/null 2>&1
+  mkdir -p /etc/splash >/dev/null 2>&1
+  if [ -n "$SPLASH_IMG" ] && [ "$SPLASH_PTH" != "/etc/splash" ]; then
+    if [ -f "/etc/splash/splash.config" ]; then
+      splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "/etc/splash/splash.config" | head -n1)
+      rm -f "/etc/splash/splash.config" >/dev/null 2>&1
+      rm -f "/etc/splash/$splash_img" >/dev/null 2>&1
     fi
-  else
-    mkdir -p /etc/splash >/dev/null 2>&1
-    if [ "$SPLASH_PTH" != "/etc/splash" ]; then
-      if [ -f "/etc/splash/splash.config" ]; then
-        splash_img=$(sed -n 's/^[[:space:]]*imagefile[[:space:]]*=[[:space:]]*//p' "/etc/splash/splash.config" | head -n1)
-        rm -f "/etc/splash/splash.config" >/dev/null 2>&1
-        rm -f "/etc/splash/$splash_img" >/dev/null 2>&1
-      fi
-      cp -f "$SPLASH_PTH/splash.config" "/etc/splash/splash.config"
-      cp -f "$SPLASH_PTH/$SPLASH_IMG" "/etc/splash/$SPLASH_IMG"
-    fi
-    if [ "$SPLASH_PLY" = "active" ] && [ -f "/etc/splash/initramfs-splash.script" ] && [ -f "/etc/splash/initramfs-splash.plymouth" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
-      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
-      rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-      mkdir -p "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-      cp -f "/etc/splash/initramfs-splash.script" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
-      cp -f "/etc/splash/initramfs-splash.plymouth" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" >/dev/null 2>&1
-      cp -f "/etc/splash/$SPLASH_IMG" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$SPLASH_IMG" >/dev/null 2>&1
-      sed -i 's#^[[:space:]]*imagefile[[:space:]]*=.*#imagefile = "'"$SPLASH_IMG"'";#' \
-        "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
-      sed -i 's#^[[:space:]]*mode[[:space:]]*=.*#mode = "'"$SPLASH_OPT"'";#' \
-        "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
-      if [ -f "/mnt/tmproot/etc/plymouth/plymouthd.conf" ]; then
-        saved_theme=$(sed -n 's/^[[:space:]]*Theme[[:space:]]*=[[:space:]]*//p' "/mnt/tmproot/etc/plymouth/plymouthd.conf" | head -n1)
-        [ "$saved_theme" != "initramfs-splash" ] && echo "$saved_theme" > "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme"
-      fi
-      echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
-      echo "Theme=initramfs-splash" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
-      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
-    elif [ "$SPLASH_PLY" = "inactive" ] && [ -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
-      mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
-      saved_theme="$(awk 'NR==1 {print $1}' /mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
-      if [ -d "/mnt/tmproot/usr/share/plymouth/themes/$saved_theme" ]; then
-        rm -f "/mnt/tmproot/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
-        rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
-        echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
-        echo "Theme=${saved_theme}" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
-      fi
-      mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
-    fi
+    cp -f "$SPLASH_PTH/splash.config" "/etc/splash/splash.config"
+    cp -f "$SPLASH_PTH/$SPLASH_IMG" "/etc/splash/$SPLASH_IMG"
   fi
+  if [ -n "$SPLASH_IMG" ] && [ "$SPLASH_PLY" = "active" ] && [ -f "/etc/splash/splash_script" ] && [ -f "/etc/splash/splash_plymouth" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
+    mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
+    mkdir -p "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+    find "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" -maxdepth 1 -mindepth 1 -not -name "plymouth_savedtheme" -exec rm -rf {} \;
+    cp -f "/etc/splash/splash_script" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+    cp -f "/etc/splash/splash_plymouth" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.plymouth" >/dev/null 2>&1
+    cp -f "/etc/splash/$SPLASH_IMG" "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/$SPLASH_IMG" >/dev/null 2>&1
+    sed -i 's#^[[:space:]]*imagefile[[:space:]]*=.*#imagefile = "'"$SPLASH_IMG"'";#' \
+      "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+    sed -i 's#^[[:space:]]*mode[[:space:]]*=.*#mode = "'"$SPLASH_OPT"'";#' \
+      "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script" >/dev/null 2>&1
+    current_theme=$(sed -n 's/^[[:space:]]*Theme[[:space:]]*=[[:space:]]*//p' "/mnt/tmproot/etc/plymouth/plymouthd.conf" 2>/dev/null | head -n1)
+    [ "$current_theme" != "initramfs-splash" ] && [ "$current_theme" != "" ] && echo "$current_theme" > "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/plymouth_savedtheme"
+    echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
+    echo "Theme=initramfs-splash" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+    mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+  elif [ -d "/mnt/tmproot/usr/share/plymouth/themes" ]; then
+    mount -o remount,rw /mnt/tmproot >/dev/null 2>&1
+    current_theme=$(sed -n 's/^[[:space:]]*Theme[[:space:]]*=[[:space:]]*//p' "/mnt/tmproot/etc/plymouth/plymouthd.conf" 2>/dev/null | head -n1)
+    saved_theme="$(awk 'NR==1 {print $1}' /mnt/tmproot/usr/share/plymouth/themes/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
+    if [ "$current_theme" == "initramfs-splash" ] || [ "$current_theme" == "" ]; then
+      echo "[Daemon]" > "/mnt/tmproot/etc/plymouth/plymouthd.conf"
+      if [ "$saved_theme" != "" ] && [ -d "/mnt/tmproot/usr/share/plymouth/themes/$saved_theme" ]; then
+        echo "Theme=${saved_theme}" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      elif [ -d "/mnt/tmproot/usr/share/plymouth/themes/ceratopsian" ]; then
+        echo "Theme=ceratopsian" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      else
+        echo "Theme=details" >> /mnt/tmproot/etc/plymouth/plymouthd.conf
+      fi
+    fi
+    rm -rf "/mnt/tmproot/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
+    mount -o remount,ro /mnt/tmproot >/dev/null 2>&1
+  fi
+
 }
 
 show_splash() {

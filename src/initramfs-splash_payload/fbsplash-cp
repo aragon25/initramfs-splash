@@ -24,10 +24,10 @@ if [ -f "${BASEDIR}/fbsplash.png" ]; then
   chmod 666 ${DESTDIR}/etc/splash/splash.png
 fi
 if [ -f "${BASEDIR}/splash_plymouth" ] && [ -f "${BASEDIR}/splash_script" ]; then
-  cp "${BASEDIR}/splash_plymouth" ${DESTDIR}/etc/splash/initramfs-splash.plymouth
-  chmod 644 ${DESTDIR}/etc/splash/initramfs-splash.plymouth
-  cp "${BASEDIR}/splash_script" ${DESTDIR}/etc/splash/initramfs-splash.script
-  chmod 644 ${DESTDIR}/etc/splash/initramfs-splash.plymouth
+  cp "${BASEDIR}/splash_plymouth" ${DESTDIR}/etc/splash/splash_plymouth
+  chmod 644 ${DESTDIR}/etc/splash/splash_plymouth
+  cp "${BASEDIR}/splash_script" ${DESTDIR}/etc/splash/splash_script
+  chmod 644 ${DESTDIR}/etc/splash/splash_script
 fi
 if [ -f "${BASEDIR}/fbsplash" ]; then
   cp "${BASEDIR}/fbsplash" ${DESTDIR}/bin

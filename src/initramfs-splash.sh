@@ -274,7 +274,6 @@ function cmd_payload_pack() {
   local PAYLOAD_LINE=$(awk '/^__PAYLOAD_BEGINS__/ { print NR; exit 0; }' "$SCRIPT_PATH")
   if [ -d "${SCRIPT_DIR}/${payload_dirname}" ]; then
     rm -f "/tmp/payload.tar.gz"
-    #( cd "${SCRIPT_DIR}/${payload_dirname}" && tar -czf "/tmp/payload.tar.gz" * )
     ( cd "${SCRIPT_DIR}/${payload_dirname}" && tar -czf "/tmp/payload.tar.gz" . )
     rm -rf "${SCRIPT_DIR}/${payload_dirname}"
   fi
@@ -313,7 +312,6 @@ function cmd_payload_unpack() {
   mkdir -p "${SCRIPT_DIR}/${payload_dirname}"
   tail -n +${PAYLOAD_LINE} "$SCRIPT_PATH" | base64 -d | tar -zpvx -C "${SCRIPT_DIR}/${payload_dirname}" &>/dev/null
   set_base_perms "${SCRIPT_DIR}/${payload_dirname}"
-  #chown -fR $(logname):$(groups $(logname) | awk '{print $3}') "${SCRIPT_DIR}/${payload_dirname}"
   [ -n "$u" ] && [ -n "$g" ] && chown -fR "$u:$g" "${SCRIPT_DIR}/${payload_dirname}" 2>/dev/null
 }
 
@@ -334,14 +332,14 @@ function cmd_update() {
 function unset_plymouth_theme() {
   if command -v plymouth-set-default-theme >/dev/null; then
     local current_theme="$(plymouth-set-default-theme)"
-    local saved_theme="$(awk 'NR==1 {print $1}' /usr/lib/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
+    local saved_theme="$(awk 'NR==1 {print $1}' /usr/share/plymouth/themes/initramfs-splash/plymouth_savedtheme 2>/dev/null)"
     if [ "$current_theme" == "initramfs-splash" ]; then
       if [ "$saved_theme" != "" ]; then
         if ! plymouth-set-default-theme -R "$saved_theme" >/dev/null 2>&1; then
-          plymouth-set-default-theme -R details >/dev/null 2>&1
+          plymouth-set-default-theme -R default >/dev/null 2>&1
         fi
       else
-        plymouth-set-default-theme -R details >/dev/null 2>&1
+        plymouth-set-default-theme -R default >/dev/null 2>&1
       fi
     fi
   else
@@ -349,7 +347,6 @@ function unset_plymouth_theme() {
     EXITCODE=1
     return 1
   fi
-  rm -f "/usr/lib/initramfs-splash/plymouth_savedtheme" >/dev/null 2>&1
   rm -rf "/usr/share/plymouth/themes/initramfs-splash" >/dev/null 2>&1
   echo "plymouth theme set to saved theme!"
 }

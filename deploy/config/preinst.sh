@@ -5,7 +5,7 @@ if [ "$(which initramfs-splash)" != "" ] && [ "$1" == "install" ]; then
   exit 1
 fi
 if [ "$1" == "install" ]; then
-  mkdir -p "/usr/lib/initramfs-splash" >/dev/null 2>&1
-  touch "/usr/lib/initramfs-splash/first_install" 2>/dev/null
+  mkdir -p "/tmp" >/dev/null 2>&1
+  touch "/tmp/initramfs-splash_inst" 2>/dev/null
 fi
 exit 0
