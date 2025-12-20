@@ -19,18 +19,19 @@ if [ -f "${BASEDIR}/fbsplash.png" ]; then
   echo fullscreen=0 >> ${DESTDIR}/etc/splash/splash.config
   echo stretch=0 >> ${DESTDIR}/etc/splash/splash.config
   echo plymouth=0 >> ${DESTDIR}/etc/splash/splash.config
-  chmod 666 ${DESTDIR}/etc/splash/splash.config
+  chmod 644 ${DESTDIR}/etc/splash/splash.config
   cp -f "${BASEDIR}/fbsplash.png" ${DESTDIR}/etc/splash/splash.png
-  chmod 666 ${DESTDIR}/etc/splash/splash.png
+  chmod 644 ${DESTDIR}/etc/splash/splash.png
 fi
 if [ -f "${BASEDIR}/splash_plymouth" ] && [ -f "${BASEDIR}/splash_script" ]; then
-  cp "${BASEDIR}/splash_plymouth" ${DESTDIR}/etc/splash/splash_plymouth
+  mkdir -p ${DESTDIR}/etc/splash
+  cp -f "${BASEDIR}/splash_plymouth" ${DESTDIR}/etc/splash/splash_plymouth
   chmod 644 ${DESTDIR}/etc/splash/splash_plymouth
-  cp "${BASEDIR}/splash_script" ${DESTDIR}/etc/splash/splash_script
+  cp -f "${BASEDIR}/splash_script" ${DESTDIR}/etc/splash/splash_script
   chmod 644 ${DESTDIR}/etc/splash/splash_script
 fi
 if [ -f "${BASEDIR}/fbsplash" ]; then
-  cp "${BASEDIR}/fbsplash" ${DESTDIR}/bin
+  cp -f "${BASEDIR}/fbsplash" ${DESTDIR}/bin
   chmod +x ${DESTDIR}/bin/fbsplash
 fi
 exit 0
