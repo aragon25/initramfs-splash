@@ -485,9 +485,8 @@ function cmd_initramfs_inactive() {
 }
 
 function cmd_cmdline_fastboot_active() {
+  cmd_cmdline_fastboot_inactive
   set_boot_rw
-  sed -i -e 's/ fastboot//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/fastboot //' "$BOOT_DIR/cmdline.txt"
   sed -i 's/$/ fastboot/g' "$BOOT_DIR/cmdline.txt"
   set_boot_ro
 }
@@ -500,15 +499,8 @@ function cmd_cmdline_fastboot_inactive() {
 }
 
 function cmd_cmdline_splash_active() {
+  cmd_cmdline_splash_inactive
   set_boot_rw
-  sed -i -e 's/ logo.nologo//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/logo.nologo //' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/ quiet//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/quiet //' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/ splash//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/splash //' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/ loglevel=[a-f0-9-]\+//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/loglevel=[a-f0-9-]\+ //' "$BOOT_DIR/cmdline.txt"
   sed -i 's/$/ logo.nologo quiet splash loglevel=3/g' "$BOOT_DIR/cmdline.txt"
   set_boot_ro
 }
@@ -527,9 +519,8 @@ function cmd_cmdline_splash_inactive() {
 }
 
 function cmd_cmdline_termcursor_active() {
+  cmd_cmdline_termcursor_inactive
   set_boot_rw
-  sed -i -e 's/ vt.global_cursor_default=[a-f0-9-]\+//' "$BOOT_DIR/cmdline.txt"
-  sed -i -e 's/vt.global_cursor_default=[a-f0-9-]\+ //' "$BOOT_DIR/cmdline.txt"
   sed -i 's/$/ vt.global_cursor_default=0/g' "$BOOT_DIR/cmdline.txt"
   set_boot_ro
 }
