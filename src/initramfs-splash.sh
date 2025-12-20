@@ -316,8 +316,7 @@ function cmd_payload_unpack() {
 }
 
 function cmd_clean() {
-  remove_initramfs
-  update_initramfs
+  cmd_initramfs_inactive
   cmd_cmdline_splash_inactive
   cmd_cmdline_termcursor_inactive
 }
