@@ -1,18 +1,17 @@
 #!/bin/bash
 function undo_changes(){
   /usr/bin/initramfs-splash --clean >/dev/null 2>&1
-  rm -f "/etc/initramfs-tools/scripts/init-top/fbsplash" >/dev/null 2>&1
-  rm -f "/etc/initramfs-tools/hooks/fbsplash" >/dev/null 2>&1
-  rm -f "/etc/initramfs-tools/hooks/splash/fbsplash" >/dev/null 2>&1
-  rm -f "/etc/initramfs-tools/hooks/splash/fbsplash.png" >/dev/null 2>&1
   exit 1
 }
-if [ -f "/usr/bin/initramfs-splash" ]; then
-  echo "update initramfs-tools folder ..."
-  /usr/bin/initramfs-splash --install >/dev/null 2>&1
+if [ -f "/tmp/initramfs-splash_inst" ]; then
+  rm -f "/tmp/initramfs-splash_inst" >/dev/null 2>&1
+  echo "activate initramfs-splash ..."
+  /usr/bin/initramfs-splash --initramfs_active >/dev/null 2>&1
   [ $? -ne 0 ] && undo_changes
-  echo "generate initramfs-image/s ..."
-  /usr/bin/initramfs-splash --update_initramfs >/dev/null 2>&1
+  echo "activate splash in cmdline ..."
+  /usr/bin/initramfs-splash -f -s -t  >/dev/null 2>&1
   [ $? -ne 0 ] && undo_changes
+else
+  /usr/bin/initramfs-splash --update >/dev/null 2>&1
 fi
 exit 0

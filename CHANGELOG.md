@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3-1] - TESTING
+
+### Added
+- Raspbian Trixie support
+- default simple plymouth theme
+
+### Fixed
+- usage text in help.
+
 ## [2.2-2] - 2025-11-20
 
 ### Changed

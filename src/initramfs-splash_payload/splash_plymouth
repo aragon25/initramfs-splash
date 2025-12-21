@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=initramfs-splash
+Description=This is a plymouth theme which simply displays an image
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/initramfs-splash
+ScriptFile=/usr/share/plymouth/themes/initramfs-splash/initramfs-splash.script
