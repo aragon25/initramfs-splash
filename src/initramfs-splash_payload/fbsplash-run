@@ -17,6 +17,7 @@ ROOT_DEV="___ROOT_DEV___"
 ROOT_MOUNT="false"
 SIMG_MOUNT="false"
 OIMG_MOUNT="false"
+SSQFS_MOUNT="false"
 
 wait_for_udev() {
 	command -v udevadm >/dev/null 2>&1 || return 0
@@ -98,15 +99,21 @@ mount_fs() {
     mkdir -p /mnt/tmproot
     if mount -r "$ROOT_DEV" /mnt/tmproot; then
       ROOT_MOUNT="true"
+      if [ -f /mnt/tmproot/IMAGES/system.sqfs ]; then
+        mkdir -p /mnt/syssqfs
+        if mount -t squashfs /mnt/tmproot/IMAGES/system.sqfs /mnt/syssqfs; then
+          SSQFS_MOUNT="true"
+        fi
+      fi
       if [ -f /mnt/tmproot/IMAGES/system.img ]; then
         mkdir -p /mnt/sysimg
-        if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
+        if mount -r -t ext4 /mnt/tmproot/IMAGES/system.img /mnt/sysimg; then
           SIMG_MOUNT="true"
         fi
       fi
       if [ -f /mnt/tmproot/IMAGES/oem.img ]; then
         mkdir -p /mnt/oemimg
-        if mount -r -t ext4 -o loop /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
+        if mount -r -t ext4 /mnt/tmproot/IMAGES/oem.img /mnt/oemimg; then
           OIMG_MOUNT="true"
         fi
       fi
@@ -119,9 +126,11 @@ get_splash_path() {
   [ -f "/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/tmproot/usr/lib/rpi-kiosk/kiosk-splash"
   [ -f "/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/sysimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
   [ -f "/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/oemimg/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
+  [ -f "/mnt/syssqfs/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash/splash.config" ] && splash_pth="/mnt/syssqfs/SYSTEM/usr/lib/rpi-kiosk/kiosk-splash"
   [ -f "/mnt/tmproot/etc/splash/splash.config" ] && splash_pth="/mnt/tmproot/etc/splash"
   [ -f "/mnt/sysimg/SYSTEM/etc/splash/splash.config" ] && splash_pth="/mnt/sysimg/SYSTEM/etc/splash"
   [ -f "/mnt/oemimg/SYSTEM/etc/splash/splash.config" ] && splash_pth="/mnt/oemimg/SYSTEM/etc/splash"
+  [ -f "/mnt/syssqfs/SYSTEM/etc/splash/splash.config" ] && splash_pth="/mnt/syssqfs/SYSTEM/etc/splash"
   [ -f "/mnt/tmproot/CONFIG/initramfs-splash/splash.config" ] && splash_pth="/mnt/tmproot/CONFIG/initramfs-splash"
   echo "$splash_pth"
 }
@@ -137,9 +146,14 @@ umount_fs() {
     umount /mnt/oemimg >/dev/null 2>&1 && OIMG_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
   attempt=1
+  while [ "$SSQFS_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
+    umount /mnt/syssqfs >/dev/null 2>&1 && SSQFS_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
+  done
+  attempt=1
   while [ "$ROOT_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
     umount /mnt/tmproot >/dev/null 2>&1 && ROOT_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
+  [ "$SSQFS_MOUNT" = "true" ] && echo "Could not umount: /mnt/syssqfs"
   [ "$SIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/sysimg"
   [ "$OIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/oemimg"
   [ "$ROOT_MOUNT" = "true" ] && echo "Could not umount: /mnt/tmproot"

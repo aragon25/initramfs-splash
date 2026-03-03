@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4-1] - TESTING
+
+### Added
+- support for squashfs image from initramfs-imgldr 2.7+
+
+### Fixed
+- small bugfixes.
+
 ## [2.3-1] - 2025-12-21
 
 ### Added

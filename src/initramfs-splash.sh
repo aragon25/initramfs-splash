@@ -12,12 +12,12 @@
 
 #get some variables
 SCRIPT_TITLE="initramfs-splash"
-SCRIPT_VERSION="2.3"
+SCRIPT_VERSION="2.4"
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-UNPACK_DIR="/tmp/unpack-$SCRIPT_NAME"
+UNPACK_DIR="$(mktemp -d)"
 if mountpoint -q "/boot/firmware"; then 
   BOOT_DIR=/boot/firmware
 elif mountpoint -q "/boot"; then
@@ -460,6 +460,9 @@ function install_initramfs() {
     EXITCODE=1
     return 1
   fi
+  if ! grep squashfs /etc/initramfs-tools/modules > /dev/null; then
+    echo squashfs >> /etc/initramfs-tools/modules
+  fi
   echo "installed splash to initramfs-tools directory."
 }
 
@@ -545,9 +548,11 @@ function cmd_print_help() {
   echo "-root filesystem:  /usr/lib/rpi-kiosk/kiosk-splash/splash.config"
   echo "-root filesystem:  /IMAGES/system.img/usr/lib/rpi-kiosk/kiosk-splash/splash.config"
   echo "-root filesystem:  /IMAGES/oem.img/usr/lib/rpi-kiosk/kiosk-splash/splash.config"
+  echo "-root filesystem:  /IMAGES/system.sqfs/usr/lib/rpi-kiosk/kiosk-splash/splash.config"
   echo "-root filesystem:  /etc/splash/splash.config"
   echo "-root filesystem:  /IMAGES/system.img/etc/splash/splash.config"
   echo "-root filesystem:  /IMAGES/oem.img/etc/splash/splash.config"
+  echo "-root filesystem:  /IMAGES/system.sqfs/etc/splash/splash.config"
   echo "-root filesystem:  /CONFIG/initramfs-splash/splash.config"
   echo " "
   echo "-c, --clean                       remove initramfs-splash, unset cmdline splash,"

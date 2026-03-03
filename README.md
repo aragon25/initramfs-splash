@@ -39,8 +39,8 @@ the device supports the configured framebuffer and image formats.
 Download and install a release package (example):
 
 ```bash
-wget https://github.com/aragon25/initramfs-splash/releases/download/v2.3-1/initramfs-splash_2.3-1_all.deb
-sudo apt install ./initramfs-splash_2.3-1_all.deb
+wget https://github.com/aragon25/initramfs-splash/releases/download/v2.4-1/initramfs-splash_2.4-1_all.deb
+sudo apt install ./initramfs-splash_2.4-1_all.deb
 ```
 
 The package installs the installer script and supporting assets to system
