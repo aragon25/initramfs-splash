@@ -17,7 +17,7 @@ ROOT_DEV="___ROOT_DEV___"
 ROOT_MOUNT="false"
 SIMG_MOUNT="false"
 OIMG_MOUNT="false"
-SSQFS_MOUNT="false"
+SQFS_MOUNT="false"
 
 wait_for_udev() {
 	command -v udevadm >/dev/null 2>&1 || return 0
@@ -102,7 +102,7 @@ mount_fs() {
       if [ -f /mnt/tmproot/IMAGES/system.sqfs ]; then
         mkdir -p /mnt/syssqfs
         if mount -t squashfs /mnt/tmproot/IMAGES/system.sqfs /mnt/syssqfs; then
-          SSQFS_MOUNT="true"
+          SQFS_MOUNT="true"
         fi
       fi
       if [ -f /mnt/tmproot/IMAGES/system.img ]; then
@@ -146,14 +146,14 @@ umount_fs() {
     umount /mnt/oemimg >/dev/null 2>&1 && OIMG_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
   attempt=1
-  while [ "$SSQFS_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
-    umount /mnt/syssqfs >/dev/null 2>&1 && SSQFS_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
+  while [ "$SQFS_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
+    umount /mnt/syssqfs >/dev/null 2>&1 && SQFS_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
   attempt=1
   while [ "$ROOT_MOUNT" = "true" ] && [ $attempt -le 30 ]; do
     umount /mnt/tmproot >/dev/null 2>&1 && ROOT_MOUNT="false" || { sleep 1; attempt=$((attempt + 1)); }
   done
-  [ "$SSQFS_MOUNT" = "true" ] && echo "Could not umount: /mnt/syssqfs"
+  [ "$SQFS_MOUNT" = "true" ] && echo "Could not umount: /mnt/syssqfs"
   [ "$SIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/sysimg"
   [ "$OIMG_MOUNT" = "true" ] && echo "Could not umount: /mnt/oemimg"
   [ "$ROOT_MOUNT" = "true" ] && echo "Could not umount: /mnt/tmproot"
