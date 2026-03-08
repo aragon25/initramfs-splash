@@ -362,6 +362,8 @@ function update_initramfs() {
   sed -i '/\[all\][^\n]*/,$!b;//{x;//p;g};//!H;$!d;x;s//&\ninclude config-custom.txt/' "$BOOT_DIR/config.txt"
   [ -e "$BOOT_DIR/config-custom.txt" ] || touch "$BOOT_DIR/config-custom.txt"
   rm -f "$BOOT_DIR/config-initramfs.txt" >/dev/null 2>&1
+  mkdir -p "/etc/initramfs-tools/conf.d"
+  echo "MODULES=most" > "/etc/initramfs-tools/conf.d/splash"
   if [[ "$distib" =~ "bullseye" ]]; then
     local suffix_long
     local suffix_short
@@ -412,8 +414,6 @@ EOF
       return 1
     fi
   elif [[ "$distib" =~ "bookworm" ]] || [[ "$distib" =~ "trixie" ]]; then
-    mkdir -p "/etc/initramfs-tools/conf.d"
-    echo "MODULES=most" > "/etc/initramfs-tools/conf.d/splash"
     update-initramfs -u
     if [ $? -eq 0 ]; then
       sed -i '/\[all\][^\n]*/,$!b;//{x;//p;g};//!H;$!d;x;s//&\ninclude config-initramfs.txt/' "$BOOT_DIR/config.txt"
