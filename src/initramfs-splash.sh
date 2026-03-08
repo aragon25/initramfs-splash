@@ -358,6 +358,7 @@ function update_initramfs() {
   sed -i '/^initramfs /d' "$BOOT_DIR/config.txt"
   sed -i '/^include config-initramfs.txt/d' "$BOOT_DIR/config.txt"
   sed -i '/^include config-custom.txt/d' "$BOOT_DIR/config.txt"
+  sed -i '/^enable_uart=1/d' "$BOOT_DIR/config.txt"
   sed -i '/\[all\][^\n]*/,$!b;//{x;//p;g};//!H;$!d;x;s//&\ninclude config-custom.txt/' "$BOOT_DIR/config.txt"
   [ -e "$BOOT_DIR/config-custom.txt" ] || touch "$BOOT_DIR/config-custom.txt"
   rm -f "$BOOT_DIR/config-initramfs.txt" >/dev/null 2>&1
@@ -412,7 +413,7 @@ EOF
     fi
   elif [[ "$distib" =~ "bookworm" ]] || [[ "$distib" =~ "trixie" ]]; then
     mkdir -p "/etc/initramfs-tools/conf.d"
-    echo "MODULES=most" > "/etc/initramfs-tools/conf.d/imgldr"
+    echo "MODULES=most" > "/etc/initramfs-tools/conf.d/splash"
     update-initramfs -u
     if [ $? -eq 0 ]; then
       sed -i '/\[all\][^\n]*/,$!b;//{x;//p;g};//!H;$!d;x;s//&\ninclude config-initramfs.txt/' "$BOOT_DIR/config.txt"
@@ -439,6 +440,7 @@ function install_initramfs() {
   fi
   mkdir -p "/etc/initramfs-tools/scripts/init-top"
   mkdir -p "/etc/initramfs-tools/hooks/splash"
+  mkdir -p "/etc/initramfs-tools/modules"
   cp -af "$UNPACK_DIR/fbsplash-run" "/etc/initramfs-tools/scripts/init-top/fbsplash"
   [ -f "/etc/initramfs-tools/scripts/init-top/fbsplash" ] || files_ok="false"
   cp -af "$UNPACK_DIR/fbsplash-cp" "/etc/initramfs-tools/hooks/fbsplash"
@@ -469,7 +471,9 @@ function install_initramfs() {
 function remove_initramfs() {
   rm -f "/etc/initramfs-tools/scripts/init-top/fbsplash" >/dev/null 2>&1
   rm -f "/etc/initramfs-tools/hooks/fbsplash" >/dev/null 2>&1
+  rm -f "/etc/initramfs-tools/conf.d/splash" >/dev/null 2>&1
   rm -rf "/etc/initramfs-tools/hooks/splash" >/dev/null 2>&1
+  echo "removed splash from initramfs-tools directory."
 }
 
 function cmd_initramfs_active() {
@@ -503,6 +507,7 @@ function cmd_cmdline_fastboot_inactive() {
 function cmd_cmdline_splash_active() {
   cmd_cmdline_splash_inactive
   set_boot_rw
+  sed -i '/^enable_uart=1/d' "$BOOT_DIR/config.txt"
   sed -i 's/$/ logo.nologo quiet splash loglevel=3/g' "$BOOT_DIR/cmdline.txt"
   set_boot_ro
 }
